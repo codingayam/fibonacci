@@ -5,8 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
-import requests
-import json
+from openai import OpenAI
 import os
 
 # Set page config
@@ -15,6 +14,9 @@ st.set_page_config(
     page_icon="📈",
     layout="wide"
 )
+
+# Initialize OpenAI client
+client = None
 
 # Title and description
 st.title("S&P 500 & NASDAQ 100 Technical Analysis Dashboard")
@@ -26,7 +28,11 @@ with st.sidebar:
     api_key = st.text_input("Enter your OpenAI API Key", type="password")
     
     if api_key:
-        st.success("API key provided!")
+        try:
+            # Initialize the client with the API key
+            client = OpenAI(api_key=api_key)
+        except Exception as e:
+            st.error(f"Error initializing OpenAI client: {str(e)}")
 
 # Sidebar for date range selection
 st.sidebar.header("Settings")
@@ -249,7 +255,7 @@ st.markdown("Ask questions about the technical analysis, Fibonacci levels, or ma
 user_query = st.text_input("Enter your question about the technical analysis:", 
                          placeholder="e.g., What do the current Fibonacci levels suggest about market direction?")
 
-if user_query and api_key:
+if user_query and client is not None:
     # Prepare context for OpenAI
     context = f"""
     Current Market Data:
@@ -272,39 +278,22 @@ if user_query and api_key:
     """
     
     try:
-        # Call OpenAI API directly using requests library
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-        
-        data = {
-            "model": "gpt-4o",
-            "messages": [
+        # Call OpenAI API using the new API format
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
                 {"role": "system", "content": "You are a professional technical analyst specializing in Fibonacci analysis and market trends. Provide clear, concise, and insightful analysis based on the provided data."},
                 {"role": "user", "content": f"Context: {context}\n\nQuestion: {user_query}"}
             ],
-            "temperature": 0.7,
-            "max_tokens": 500
-        }
-        
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            data=json.dumps(data)
+            temperature=0.7,
+            max_tokens=500
         )
         
-        if response.status_code == 200:
-            response_data = response.json()
-            analysis = response_data['choices'][0]['message']['content']
-            
-            # Display the response
-            st.markdown("### Analysis")
-            st.write(analysis)
-        else:
-            st.error(f"Error from OpenAI API: {response.status_code} - {response.text}")
+        # Display the response
+        st.markdown("### Analysis")
+        st.write(response.choices[0].message.content)
         
     except Exception as e:
         st.error(f"Error getting AI analysis: {str(e)}")
-elif user_query and not api_key:
+elif user_query and client is None:
     st.warning("Please enter your OpenAI API key in the sidebar to get AI analysis.") 
