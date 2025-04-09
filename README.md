@@ -35,6 +35,23 @@ python -m streamlit run app_simple.py
 3. View the interactive charts and Fibonacci levels
 4. Ask questions about the technical analysis in the AI Assistant section
 
+## Cloud Deployment
+
+This app can be deployed to Streamlit Cloud:
+
+1. Push your code to GitHub
+2. Go to [Streamlit Cloud](https://streamlit.io/cloud)
+3. Connect your GitHub repository
+4. Deploy the app
+
+### Troubleshooting Cloud Deployment
+
+If you encounter issues with data fetching in the cloud environment:
+
+1. The app will automatically try alternative ticker symbols (SPY for S&P 500, QQQ for NASDAQ 100)
+2. Check the logs in Streamlit Cloud for detailed error messages
+3. You may need to adjust the date range if historical data is not available
+
 ## Requirements
 
 - Python 3.9+

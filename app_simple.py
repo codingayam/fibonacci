@@ -39,30 +39,43 @@ start_date = datetime(start_year, 1, 1)
 # Fetch data function with bi-monthly sampling
 @st.cache_data(ttl=3600)  # Cache data for 1 hour
 def fetch_data(ticker, start_date, end_date):
-    # Fetch data from yfinance with retries
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            data = yf.download(ticker, start=start_date, end=end_date, timeout=30)
-            break
-        except Exception as e:
-            if attempt == max_retries - 1:  # Last attempt
-                st.error(f"Failed to fetch data for {ticker} after {max_retries} attempts: {str(e)}")
-                return pd.DataFrame()
-            time.sleep(2)  # Wait before retrying
+    # Define alternative ticker symbols for cloud environments
+    ticker_alternatives = {
+        "^GSPC": ["^GSPC", "SPY", "SP500", "SPX"],
+        "^NDX": ["^NDX", "QQQ", "NDX", "ND100"]
+    }
     
-    # Check if the data is empty
-    if data.empty:
-        st.error(f"No data available for {ticker}")
-        return pd.DataFrame()
+    # Get alternative tickers if available
+    alternatives = ticker_alternatives.get(ticker, [ticker])
     
-    # Debug: Print column names to see what's available
-    st.write(f"Columns for {ticker}: {data.columns.tolist()}")
+    # Try each alternative ticker
+    for alt_ticker in alternatives:
+        # Fetch data from yfinance with retries
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                st.info(f"Attempting to fetch data for {alt_ticker} (attempt {attempt+1}/{max_retries})")
+                data = yf.download(alt_ticker, start=start_date, end=end_date, timeout=30)
+                
+                # Check if we got valid data
+                if not data.empty and len(data) > 0:
+                    st.success(f"Successfully fetched data for {alt_ticker}")
+                    return process_data(data, alt_ticker)
+                
+                st.warning(f"No data returned for {alt_ticker}, trying next alternative...")
+                break
+            except Exception as e:
+                st.warning(f"Error fetching {alt_ticker}: {str(e)}")
+                if attempt == max_retries - 1:  # Last attempt
+                    st.error(f"Failed to fetch data for {alt_ticker} after {max_retries} attempts")
+                time.sleep(2)  # Wait before retrying
     
-    # Print the last date in the data for debugging
-    st.write(f"Last date in raw data for {ticker}: {data.index[-1]}")
-    
-    # Handle multi-level column names and resample
+    # If we get here, all alternatives failed
+    st.error(f"Could not fetch data for {ticker} or any alternatives")
+    return pd.DataFrame()
+
+def process_data(data, ticker):
+    """Process the downloaded data to ensure it's in the correct format"""
     try:
         # Create a copy of the data with simplified column names
         processed_data = pd.DataFrame()
@@ -70,9 +83,23 @@ def fetch_data(ticker, start_date, end_date):
         # Map the multi-level columns to single level
         if isinstance(data.columns, pd.MultiIndex):
             for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-                processed_data[col] = data[(col, ticker)]
+                if (col, ticker) in data.columns:
+                    processed_data[col] = data[(col, ticker)]
+                elif col in data.columns:
+                    processed_data[col] = data[col]
         else:
             processed_data = data.copy()
+        
+        # Ensure we have the required columns
+        required_cols = ['Open', 'High', 'Low', 'Close']
+        for col in required_cols:
+            if col not in processed_data.columns:
+                st.error(f"Missing required column: {col}")
+                return pd.DataFrame()
+        
+        # Add Volume column if missing
+        if 'Volume' not in processed_data.columns:
+            processed_data['Volume'] = 0
         
         # Resample to bi-monthly data
         resampled_data = processed_data.resample('2ME').agg({
@@ -83,14 +110,10 @@ def fetch_data(ticker, start_date, end_date):
             'Volume': 'sum'
         })
         
-        # Print the last date after resampling for debugging
-        st.write(f"Last date after resampling for {ticker}: {resampled_data.index[-1]}")
-        
         return resampled_data
         
     except Exception as e:
         st.error(f"Error processing data for {ticker}: {str(e)}")
-        st.write("Available columns:", data.columns.tolist())
         return pd.DataFrame()
 
 # Calculate Fibonacci retracement levels
