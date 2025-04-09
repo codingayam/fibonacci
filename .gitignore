@@ -42,5 +42,6 @@ Thumbs.db
 # Streamlit
 .streamlit/
 
-# Logs
-*.log 
+# Secrets
+.env
+*.env 
